@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+tflite-runtime = {file = "https://github.com/google-coral/pycoral/releases/download/release-frogfish/tflite_runtime-2.5.0-cp37-cp37m-linux_armv7l.whl"}
+pillow = "==8.1.0"
+opencv-python = "*"
+schedule = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.7"
