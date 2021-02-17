@@ -1,6 +1,6 @@
 # ObjectDetection-webcam
 
-## インストール
+## インストール (時間かかる)
 ```
 pipenv install
 ```
