@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "a64cf58ba5bf7c90527a44deb15975542fd6c3b4c2be167c22e95e58d735aa28"
+            "sha256": "4d9c2eb8b1593b02f7cbe3ad679a8244ac16e5f64af7edd15250f482eb86e199"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -115,14 +115,6 @@
             "index": "pypi",
             "version": "==8.1.0"
         },
-        "schedule": {
-            "hashes": [
-                "sha256:1654cf70860a6d4d58236c98b0f1bb71521cc2a4bbf031b6cc39c96e77d59a91",
-                "sha256:82369250700af61af40bbf38efc8698560aaba8fa3e58eec7209c20aa05b9d02"
-            ],
-            "index": "pypi",
-            "version": "==1.0.0"
-        },
         "tflite-runtime": {
             "file": "https://github.com/google-coral/pycoral/releases/download/release-frogfish/tflite_runtime-2.5.0-cp37-cp37m-linux_armv7l.whl",
             "hashes": [
@@ -132,5 +124,13 @@
             "version": "==2.5.0"
         }
     },
-    "develop": {}
+    "develop": {
+        "rope": {
+            "hashes": [
+                "sha256:786b5c38c530d4846aa68a42604f61b4e69a493390e3ca11b88df0fbfdc3ed04"
+            ],
+            "index": "pypi",
+            "version": "==0.18.0"
+        }
+    }
 }
