@@ -13,3 +13,6 @@ rope = "*"
 
 [requires]
 python_version = "3.7"
+
+[scripts]
+main = "pipenv run python main.py --model model/detect.tflite --label model/coco_labels.txt"
