@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 import argparse
 import json
 from time import time
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
 from binary import Binarizer
 from object_detector import ObjectDetector
@@ -38,7 +38,23 @@ def annotate_objects(image, results, labels, filename='sample.jpg'):
     draw = ImageDraw.Draw(image)
     size = image.size
 
+    annoateions = get_annotations(results, size, labels)
+
+    for annotation in annoateions:
+        ymin, xmin, ymax, xmax = annotation[0]
+
+        draw.rectangle([xmin, ymin, xmax, ymax])
+        font = ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeSans.ttf", 16)
+        draw.text([xmin, ymin], f"{annotation[1]}: {annotation[2]}", fill=(0, 0, 0) , font=font)
+
+    image.save(filename)
+
+def get_annotations(results, size, labels):
+    annotations = []
     for result in results:
+        if labels[result['class_id']] != 'person':
+            continue
+
         ymin, xmin, ymax, xmax = result['bounding_box']
         
         xmin = int(xmin * size[0])
@@ -46,16 +62,14 @@ def annotate_objects(image, results, labels, filename='sample.jpg'):
         xmax = int(xmax * size[0])
         ymax = int(ymax * size[1])
 
-        draw.rectangle([xmin, ymin, xmax, ymax])
-        font = ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeSans.ttf", 16)
-        draw.text([xmin, ymin], f"{result['score']}: {labels[result['class_id']]}", fill=(0, 0, 0) , font=font)
-
-    image.save(filename)
+        annotations.append([(xmin, ymin, xmax, ymax), labels[result['class_id']], result['score']])
+    
+    return annotations
 
 def detect(image_array, detector, number):
     start = time()
 
-    binarizer = Binarizer('bg.jpg', 50)
+    binarizer = Binarizer('bg.jpg', 30)
     gray = binarizer.binarization(image_array)
     cv2.imwrite(f'{DIR}/bin{number}.jpg', gray)
     results = detector.detect_object(gray, 0.5)
@@ -79,7 +93,11 @@ def detect(image_array, detector, number):
         print(f"時間：{time_delta}秒")
 
         # バウンディングボックスとラベルを付けた画像を出力する
-        annotate_objects(image, results, labels, f'{DIR}/captured{number}.jpg')
+        # annotate_objects(image, results, labels, f'{DIR}/captured{number}.jpg')
+        x, y = image_array.shape[1], image_array.shape[0]
+        annotations = get_annotations(results, (x, y), labels)
+        
+        return annotations
 
 def main():
     """
@@ -104,24 +122,32 @@ def main():
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
+    tpe = ThreadPoolExecutor()
+
     detector = ObjectDetector(args.model, args.label)
 
+    annotations = None
     number = 1  # 保存時の名前用
     pre = time()
     while True:
         # 撮影する
         _, image_array = camera.read()
 
-        # プレビューを表示する
-        cv2.imshow('preview', image_array)
-
         # 物体検出を行う (スレッドを立てる)
         now = time()
         if now - pre > 3:
-            th = Thread(target=detect, args=[image_array, detector, number])
-            th.start()
+            annotations = tpe.submit(detect, image_array, detector, number)
             pre = now
             number += 1
+
+        # プレビューを表示する
+        if annotations != None:
+            for annotation in annotations.result():
+                xmin, ymin, xmax, ymax = annotation[0]
+                cv2.rectangle(image_array, (xmin, ymin), (xmax, ymax), (0, 0, 255))
+                cv2.putText(image_array, f'{annotation[1]}: {annotation[2]}', (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
+        
+        cv2.imshow('preview', image_array)
 
         # ループ内にwaitKeyは必要
         if cv2.waitKey(1) == ord('q'):
