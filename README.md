@@ -7,7 +7,7 @@ pipenv install
 
 ## 実行
 ```
-pipenv run python detect_webcam.py
+pipenv run main
 ```
 
 ## 注意
