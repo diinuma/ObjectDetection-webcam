@@ -135,7 +135,7 @@ def main():
 
         # 物体検出を行う (スレッドを立てる)
         now = time()
-        if now - pre > 3:
+        if now - pre > 2:
             annotations = tpe.submit(detect, image_array, detector, number)
             pre = now
             number += 1
