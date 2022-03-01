@@ -1,9 +1,13 @@
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+import paho.mqtt.client as mqtt
 
+import ssl
+import configparser
 import argparse
 import json
 from time import time
+import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from binary import Binarizer
@@ -104,57 +108,99 @@ def main():
     メイン関数
     実行時の引数としてモデルファイルのパスを受け取る
     """
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        '--model', help='File path of .tflite file.', required=True
-    )
+    camera = None
+    client = None
 
-    parser.add_argument(
-        '--label', help='File path of label file.', required=True
-    )
+    try:
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+        parser.add_argument(
+            '--model', help='File path of .tflite file.', required=True
+        )
 
-    args = parser.parse_args()
+        parser.add_argument(
+            '--label', help='File path of label file.', required=True
+        )
 
-    # カメラを接続する
-    camera = cv2.VideoCapture(0)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        args = parser.parse_args()
 
-    tpe = ThreadPoolExecutor()
+        # AWS IoT Coreを設定する
+        cfg = configparser.ConfigParser()
+        cfg.read('config.ini', encoding='utf-8')
+        port = cfg['DEFAULT'].getint('PORT')
+        cert = cfg['DEFAULT'].get('CERT')
+        rootCA = cfg['DEFAULT'].get('ROOT_CA')
+        key = cfg['DEFAULT'].get('KEY')
+        endpoint = cfg['DEFAULT'].get('ENDPOINT')
+        topic = cfg['DEFAULT'].get('TOPIC')
 
-    detector = ObjectDetector(args.model, args.label)
+        client = mqtt.Client(protocol=mqtt.MQTTv311)
+        client.tls_set(ca_certs=rootCA, 
+                        certfile=cert, 
+                        keyfile=key, 
+                        cert_reqs=ssl.CERT_REQUIRED,
+                        tls_version=ssl.PROTOCOL_TLSv1_2,
+                        ciphers=None)
+        client.connect(endpoint, port=port, keepalive=60)
+        client.loop_start()
 
-    annotations = None
-    number = 1  # 保存時の名前用
-    pre = time()
-    while True:
-        # 撮影する
-        _, image_array = camera.read()
+        # カメラを接続する
+        camera = cv2.VideoCapture(0)
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-        # 物体検出を行う (スレッドを立てる)
-        now = time()
-        if now - pre > 2:
-            annotations = tpe.submit(detect, image_array, detector, number)
-            pre = now
-            number += 1
+        tpe = ThreadPoolExecutor()
 
-        # プレビューを表示する
-        if annotations != None:
-            for annotation in annotations.result():
-                xmin, ymin, xmax, ymax = annotation[0]
-                cv2.rectangle(image_array, (xmin, ymin), (xmax, ymax), (0, 0, 255))
-                cv2.putText(image_array, f'{annotation[1]}: {annotation[2]}', (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
+        detector = ObjectDetector(args.model, args.label)
+
+        annotations = None
+        number = 1  # 保存時の名前用
+        pre = time()
+        while True:
+            # 撮影する
+            _, image_array = camera.read()
+
+            # 物体検出を行う (スレッドを立てる)
+            now = time()
+            if now - pre > 2:
+                annotations = tpe.submit(detect, image_array, detector, number)
+                pre = now
+                number += 1
+
+                with open('/tmp/persons.json') as f:
+                    load = json.load(f)
+                    count = load['count']
+                    message = {
+                        'ID':'SRC',
+                        'people_num':count,
+                        'timestamp':datetime.datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
+                    }
+
+                    client.publish(topic, json.dumps(message))
+
+            # プレビューを表示する
+            if annotations != None:
+                for annotation in annotations.result():
+                    xmin, ymin, xmax, ymax = annotation[0]
+                    cv2.rectangle(image_array, (xmin, ymin), (xmax, ymax), (0, 0, 255))
+                    cv2.putText(image_array, f'{annotation[1]}: {annotation[2]}', (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
+            
+            cv2.imshow('preview', image_array)
+
+            # ループ内にwaitKeyは必要
+            if cv2.waitKey(1) == ord('q'):
+                break
+    except Exception as e:
+        print(e)
+    finally: 
+        cv2.destroyAllWindows()
+
+        if camera != None:
+            camera.release()
         
-        cv2.imshow('preview', image_array)
-
-        # ループ内にwaitKeyは必要
-        if cv2.waitKey(1) == ord('q'):
-            break
-
-    cv2.destroyAllWindows()
-    camera.release()
+        if client != None:
+            client.disconnect()
 
 
 if __name__ == '__main__':
